@@ -1,5 +1,5 @@
-SCUBA, Version Diamond (64-bit) 3.11.3.469
-Tue Jun 15 14:16:40 2021
+SCUBA, Version Diamond (64-bit) 3.12.1.454
+Tue Jun 18 09:32:50 2024
   
 Copyright (c) 1991-1994 by NeoCAD Inc. All rights reserved.
 Copyright (c) 1995 AT&T Corp.   All rights reserved.
@@ -9,26 +9,21 @@ Copyright (c) 2002-2020 Lattice Semiconductor Corporation,  All rights reserved.
   
 BEGIN SCUBA Module Synthesis
   
-    Issued command   : C:\lscc\diamond\3.11_x64\ispfpga\bin\nt64\scuba.exe -w -n P3038DM_PWMAP -lang vhdl -synth synplify -bus_exp 7 -bb -arch xo2c00 -dram -type romblk -addr_width 8 -num_words 256 -data_width 8 -outdata UNREGISTERED -memfile c:/kevan/a3038/p3038dm/p3038dm_pwmap.mem -memformat hex 
-    Circuit name     : P3038DM_PWMAP
-    Module type      : rom
-    Module Version   : 2.8
-    Address width    : 8
-    Data width       : 8
+    Issued command   : C:\lscc\diamond\3.12\ispfpga\bin\nt64\scuba.exe -w -n P3038DM_PLL -lang vhdl -synth synplify -arch xo2c00 -type pll -fin 10 -fclkop 40 -fclkop_tol 0.0 -trimp 0 -phasep 0 -trimp_r -phase_cntl STATIC -fb_mode 1 -lock 
+    Circuit name     : P3038DM_PLL
+    Module type      : pll
+    Module Version   : 5.7
     Ports            : 
-    Inputs       : Address[7:0]
-    Outputs      : Q[7:0]
+    Inputs       : CLKI
+    Outputs      : CLKOP, LOCK
     I/O buffer       : not inserted
-    Memory file      : c:/kevan/a3038/p3038dm/p3038dm_pwmap.mem
-    EDIF output      : P3038DM_PWMAP.edn
-    VHDL output      : P3038DM_PWMAP.vhd
-    VHDL template    : P3038DM_PWMAP_tmpl.vhd
-    VHDL testbench   : tb_P3038DM_PWMAP_tmpl.vhd
+    EDIF output      : P3038DM_PLL.edn
+    VHDL output      : P3038DM_PLL.vhd
+    VHDL template    : P3038DM_PLL_tmpl.vhd
     VHDL purpose     : for synthesis and simulation
     Bus notation     : big endian
-    Report output    : P3038DM_PWMAP.srp
+    Report output    : P3038DM_PLL.srp
     Estimated Resource Usage:
-            LUT : 64
   
 END   SCUBA Module Synthesis
 

@@ -85,7 +85,7 @@ set Para(install_dir) $env(TOOLRTF)
 set Para(FPGAPath) "[file join $Para(install_dir) ispfpga bin $platformpath]"
 
 set scuba "$Para(FPGAPath)/scuba"
-set modulename "P3038DM_PWMAP"
+set modulename "P3038DM_PLL"
 set lang "vhdl"
 set lpcfile "$Para(sbp_path)/$modulename.lpc"
 set arch "xo2c00"

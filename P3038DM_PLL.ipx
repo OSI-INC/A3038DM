@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<DiamondModule name="P3038DM_PLL" module="P3038DM_PLL" VendorName="Lattice Semiconductor Corporation" generator="IPexpress" date="2021 05 26 16:40:36.877" version="5.8" type="Module" synthesis="synplify" source_format="VHDL">
+<DiamondModule name="P3038DM_PLL" module="P3038DM_PLL" VendorName="Lattice Semiconductor Corporation" generator="IPexpress" date="2024 06 18 09:32:52.051" version="5.8" type="Module" synthesis="synplify" source_format="VHDL">
   <Package>
-		<File name="P3038DM_PLL.lpc" type="lpc" modified="2021 05 26 16:40:34.647"/>
-		<File name="P3038DM_PLL.vhd" type="top_level_vhdl" modified="2021 05 26 16:40:34.709"/>
-		<File name="P3038DM_PLL_tmpl.vhd" type="template_vhdl" modified="2021 05 26 16:40:34.709"/>
+		<File name="P3038DM_PLL.lpc" type="lpc" modified="2024 06 18 09:32:50.382"/>
+		<File name="P3038DM_PLL.vhd" type="top_level_vhdl" modified="2024 06 18 09:32:50.429"/>
+		<File name="P3038DM_PLL_tmpl.vhd" type="template_vhdl" modified="2024 06 18 09:32:50.429"/>
   </Package>
 </DiamondModule>

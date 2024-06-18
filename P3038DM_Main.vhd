@@ -1,63 +1,12 @@
 -- <pre> Radio-Frequency Detector Module (A3038DM) Firmware, Toplevel Unit
 
--- Compile with Synplify Pro. The message decoder fails if compiled with the Lattice synthesizer.
+-- [18-JUN-24] Based on P3038DM V8.1, This standalone detector module carries its 
+-- own 10-MHz oscillator and acts as a transmitter-on test circuit for surgeries 
+-- and storage rooms. We switch DMCK to the on-board oscillator footprint that is
+-- available on the A303801A printed circuit board. Remove HIDE and SHOW. Eliminate
+-- indication of message buffer overflow and underflow.
 
--- Version A01, 01-JAN-21, Translate message decoder from ABEL to VHDL. Add code to flash indicator lights when
--- receiving and message ready. 
-
--- Version A02, 12-JAN-21, Switch to 80 MHz clock input.
-
--- Version A03, 16-APR-21. Separate detector from main code. Detector provides message_id as an integer and
--- message_data as a standard logic vector. We confirm that message_id is being received correctly with a
--- lamp dedicated to one particular channel.
-
--- Version A04, 19-APR-21. Add Data Upstream Bus (DUB), Data Downstream Bus (DDB), and Detector Control Bus (DCB).
--- and implement the global flags the detector modules share for power measurement and readout. We find that the
--- message detector does not work when we compile with the Lattice synthesizer. We must use the Synplify Pro
--- synthesizer. We add the message fifo and write messages into it. Our red lamp, LED2, indicates that the
--- fifo is full.
-
--- Version A05, 20-APR-21. Complete a draft of the entire functionality, including storing incoming messages in
--- the FIFO, reading them out, and arranging the output bytes over the daisy-chained eight-bit detector module
--- bus. We have the FIFO implemented in LUTs. It is 16 thirty-two-bit message records, each containing an ID,
--- HI and LO bytes, and power byte.
-
--- Version A06, 10-MAY-21. Improve indicator implementation for HIDE and SHOW. Use rising edge of CK to clock
--- message writes to FIFO as well as reads from, thus allowing us 25 ns from a write to the next read rather
--- than 12.5 ns. Implement power display look-up table in distributed ROM. Discover that we are not clocking
--- the final bit out of the ADC, so correct power readout and check response with transmitter and looking at
--- duty cycle of the power indicator lamp. Assign lamps with constants and make the blue lamp the power
--- indicator, because we find it is much more visible than the white. Changed the board power indicator to 
--- a run indicator that reduces the intensity of the green lamp at the same time as requiring the clocks to
--- turn on. Enhance the red error lamp so it gives a short flash for FIFO full erro and a longer flash for 
--- empty error. We have 10 kHz SLWCK and 10 Hz LCK. We update the decoder, correcting its reset behavior
--- and removing the CNT signal. Our message recorder resets the decoder after it stores a message, regardless
--- of whether its decoder had received the message or not. Add a 100-ms timer to the power indicator so that
--- it turns off in the absence of new samples.
-
--- Version A07, 31-MAY-21. Update power indication only when at least one detector receives a complete message.
--- Remove the expiration of power measurement to simplify the code while lookig for bugs. Synchronize the
--- control signals with respect to the rising edge of CK rather than FCK to remove timing and metastability
--- problems we observed through examination of the power readout state machine. Increase hysteresis on 
--- tri-state inputs. Add power calibration parameter that we subtract from the raw power measurement. For now
--- this value is zero. Remove 80 MHz clock and instead use DMCK with PLL to make 40 MHz. We add a PLL lock
--- error to the possible sources of DMERR.
-
--- Version A08, 15-JUN-21. Assign test pin outputs. Improve power indicator map. Fix vulnerability of state
--- machines to glitches in GRCV and GINC that occur when we assert outputs as soon as we see either signal
--- unasserted. In particular, when a test point is asserted on !GINC, we can induce a spike in GINC.
-
--- V8.1, 15-SEP-22. Create Git repository. No change in functionality, identical to A08.
-
--- [22-NOV-22] We note that we are passing DSD_sync up the daisy chain instead of DSD, which
--- increases the delay of data strobe through each intermediate detector module.-- Our intention was to reduce this delay as much as possible, so we should have passed 
--- the value of the strobe at the input pin without synchronization. Through 15 detectors 
--- the delay can be 375 ns. Returning, we have combinatorial propagation. The controller allows
--- 600 ns from assertion of DS to reading the data bus. So long as the response of detector 16-- returns in 225 ns, the read will be successful. And indeed we have not seen readout failures
--- from detector 16 on our ALTs. We do not fix this problem, for fear of introducting a bug, but
--- recommend fixing the problem when we next modify the firmware.
-
--- Global Constantslibrary ieee;  
+-- Global Constants
 library ieee;  
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -77,9 +26,7 @@ entity main is
 		GERR : inout std_logic; -- Global detector module error flag (DC2)
 		GINC : inout std_logic; -- Global incoming message flag (DC3)
 		GRCV : inout std_logic; -- Global message received flag (DC4)
-		HIDE : in std_logic; -- Turn off indicator lamps (DC5)
-		SHOW : in std_logic; -- Turn on indicator lamps (DC6)
-		DMCK : in std_logic; -- Detector Module Clock (DC7)
+		DMCK : in std_logic; -- Detector Module Clock (10 MHz Oscillator)
 		LED : out std_logic_vector(5 downto 1); -- Indictors Lamps
 		TP : out std_logic_vector(4 downto 1) -- Test Points
 	);
@@ -599,22 +546,10 @@ begin
 		end if;
 	end process;
 	
-	-- The error detector looks for overflow or empty FIFO conflicts.
+	-- The error detector looks for failure to lock.
 	Error_Detection : process (CK,RESET) is
 	begin
-		if RESET = '1' then
-			FIFO_FULL_ERR <= false;
-			FIFO_EMPTY_ERR <= false;
-		elsif rising_edge(CK) then
-			if (WRMSG = '1') and (FIFO_FULL = '1') then
-				FIFO_FULL_ERR <= true;
-			end if;
-			if (RDMSG = '1') and (FIFO_EMPTY = '1') then
-				FIFO_EMPTY_ERR <= true;
-			end if;
-		end if;
-		
-		DMERR <= to_std_logic(FIFO_EMPTY_ERR or FIFO_FULL_ERR or (LOCK = '0'));
+		DMERR <= to_std_logic(LOCK = '0');
 	end process;
 	
 	-- The run indicator glows steady if power is on, logic is programmed,
@@ -632,19 +567,12 @@ begin
 		
 		run_led_on := (counter rem 4) = 3;
 			
-		if HIDE = '1' then
-			run_led_on := false;
-		end if;
-		
-		if SHOW = '1' then
-			run_led_on := true;
-		end if;
-		
 		LED(run_led_num) <= to_std_logic(run_led_on);
 	end process;
 	
 	-- The status indicator is off when all is well, and flashes 
-	-- to indicate error conditions.
+	-- to indicate error conditions. In this standalone code, the
+	-- only error is failure to get 40 MHz from 10 MHz with the PLL.
 	Status_Indicator : process (LCK) is
 	variable counter : integer range 0 to 15;	variable err_led_on : boolean;
 	begin
@@ -653,18 +581,7 @@ begin
 			err_led_on := false;
 		end if;
 		
-		err_led_on := 
-			(FIFO_FULL_ERR and (counter >= 0) and (counter <= 1))
-			or (FIFO_EMPTY_ERR and (counter >= 4) and (counter <= 11))
-			or (LOCK = '0');
-		
-		if HIDE = '1' then
-			err_led_on := false;
-		end if;
-		
-		if SHOW = '1' then
-			err_led_on := true;
-		end if;
+		err_led_on := (LOCK = '0');
 		
 		LED(err_led_num) <= to_std_logic(err_led_on);
 	end process;
@@ -675,11 +592,7 @@ begin
 	constant pulse_length : integer := 32768;
 	begin
 		if rising_edge(CK) then
-			if SHOW = '1' then
-				LED(inc_led_num) <= '1';
-			elsif HIDE = '1' then
-				LED(inc_led_num) <= '0';
-			elsif (counter = 0) then
+			if (counter = 0) then
 				if (INCOMING = '1') then
 					counter := 1;
 				else
@@ -703,11 +616,7 @@ begin
 	constant pulse_length : integer := 32768;
 	begin
 		if rising_edge(CK) then
-			if SHOW = '1' then
-				LED(rcv_led_num) <= '1';
-			elsif HIDE = '1' then
-				LED(rcv_led_num) <= '0';
-			elsif (counter = 0) then
+			if (counter = 0) then
 				if (RECEIVED = '1') then
 					counter := 1;
 				else
@@ -732,18 +641,14 @@ begin
 		Q => pwr_intensity
 	);
 
-	-- Power LED brightness proportional to the log of most recetnly-received 
+	-- Power LED brightness proportional to the log of most recently-received 
 	-- message's power. We use the slow clock to generate a lamp signal with
 	-- duty cycle proportional to log power.
 	Power_Indicator : process (SLWCK) is 
 	variable counter : integer range 0 to 255;
 	begin
 		if rising_edge(SLWCK) then
-			if SHOW = '1' then
-				LED(pwr_led_num) <= '1';
-			elsif HIDE = '1' then
-				LED(pwr_led_num) <= '0';
-			elsif counter < to_integer(unsigned(pwr_intensity)) then
+			if counter < to_integer(unsigned(pwr_intensity)) then
 				LED(pwr_led_num) <= '1';	
 			else
 				LED(pwr_led_num) <= '0';
