@@ -50,13 +50,12 @@
 -- V8.1, 15-SEP-22. Create Git repository. No change in functionality, identical to A08.
 
 -- [22-NOV-22] We note that we are passing DSD_sync up the daisy chain instead of DSD, which
--- can increase the delay of data strobe up to 25 ns through each intermediate detector module.-- Our intention was to reduce this delay as much as possible, so we should have passed 
+-- increases the delay of data strobe through each intermediate detector module.-- Our intention was to reduce this delay as much as possible, so we should have passed 
 -- the value of the strobe at the input pin without synchronization. Through 15 detectors 
 -- the delay can be 375 ns. Returning, we have combinatorial propagation. The controller allows
 -- 600 ns from assertion of DS to reading the data bus. So long as the response of detector 16-- returns in 225 ns, the read will be successful. And indeed we have not seen readout failures
--- from detector 16 on our ALTs.
-
-
+-- from detector 16 on our ALTs. We do not fix this problem, for fear of introducting a bug, but
+-- recommend fixing the problem when we next modify the firmware.
 
 -- Global Constantslibrary ieee;  
 library ieee;  
