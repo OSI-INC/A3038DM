@@ -236,7 +236,7 @@ begin
 	variable counter : integer range 0 to 15;	variable err_led_on : boolean;
 	begin
 		if RESET = '1' then
-			LED(err_led_num) <= '0';
+			LED(err_led_num) <= '1';
 		else
 			LED(err_led_num) <= not LOCK;
 		end if;
