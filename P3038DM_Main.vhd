@@ -21,9 +21,9 @@ entity main is
 		SCK : inout std_logic; -- Serial Clock for ADC
 		NCS : inout std_logic; -- Negated Chip Select for ADC
 		RESET : in std_logic; -- Reset from master (DC0)
-		DC : out std_logic_vector(5 downto 1); -- External Indicators
-		DMCK : in std_logic; -- Detector Module Clock (10 MHz Oscillator)
-		LED : inout std_logic_vector(5 downto 1); -- On-Board Indictors
+		DC : out std_logic_vector(5 downto 1); -- Indicators (DC1-DC5)
+		DMCK : in std_logic; -- 10-MHz Clock (DC7)
+		LED : inout std_logic_vector(5 downto 1); -- Indictors
 		TP : out std_logic_vector(4 downto 1) -- Test Points
 	);
 	
@@ -41,9 +41,6 @@ architecture behavior of main is
 	attribute syn_keep : boolean;
 	attribute nomerge : string;
 
--- Detector Control Bus Signals
-	signal DMERR : std_logic; -- Detector module error, to master.
-
 -- Message Decoder Signals
 	signal CONTINUE : std_logic; -- Tell message detector to continue detection.
 	signal RSTDCR : std_logic; -- Reset the decoder.
@@ -56,13 +53,12 @@ architecture behavior of main is
 	signal CK : std_logic; -- Decoder Clock 40 MHz
 	signal IOCK : std_logic; -- Input-Output Clock 20 MHz
 	signal SLWCK : std_logic; -- Slow Clock 10 kHz
-	signal LCK : std_logic; -- Lamp Clock 10 Hz
 	signal LOCK : std_logic; -- PLL Lock
-	signal clock_divA, clock_divB : std_logic_vector(7 downto 0);
+	signal clock_divA : std_logic_vector(7 downto 0);
 	
 -- ADC Signals
 	signal pwr, pwr_rcv, pwr_intensity : std_logic_vector(7 downto 0);
-	signal PRDY : boolean;		
+		
 -- Functions and Procedures	
 	function to_std_logic (v: boolean) return std_ulogic is
 	begin if v then return('1'); else return('0'); end if; end function;
@@ -81,43 +77,22 @@ begin
 		LOCK => LOCK
 	);
 
-	-- Synchronize control inputs with respect to the rising edge of CK. Generate 
-	-- IOCK at 20 MHz. Apply de-bounce to incoming signals that fall slowly so as
-	-- to guarantee only one falling edge.
-	Synchronizer : process (CK) is
-	begin
-		-- Generate 20-MHz Input-Output Clock.
-		if rising_edge(CK) then
-			IOCK <= to_std_logic(IOCK = '0');
-		end if;
-	end process;
-	
-	-- We use the lamp clock to provide human-visible signalling with lamps.
-	-- Our divider runs of CK, which is 40 MHz. We divide CK by 256 twice to 
-	-- get 610 Hz. We divide by 61 to get 10 Hz to control lamp signals. We 
-	-- divide CK by 256 once to get 156 kHz, then divide by 16 to get 10 kHz.
+	-- We provide IOCK (20 MHz), and SLWCK (10 kHz).
 	Slow_Clocks : process (CK) is
-	variable div1,div2 : integer range 0 to 63;
+	variable div1 : integer range 0 to 63;
 	begin
 		if rising_edge(CK) then
 			clock_divA <= std_logic_vector(unsigned(clock_divA)+1);
+			IOCK <= to_std_logic(IOCK = '0');
 		end if;
+		
 		if rising_edge(clock_divA(7)) then
-			clock_divB <= std_logic_vector(unsigned(clock_divB) + 1);
 			if div1 = 15 then
 				div1 := 0;
 			else
 				div1 := div1 + 1;
 			end if;
 			SLWCK <= to_std_logic(div1 < 9);
-		end if;
-		if rising_edge(clock_divB(7)) then
-			if div2 = 60 then
-				div2 := 0;
-			else
-				div2 := div2 + 1;
-			end if;
-			LCK <= to_std_logic(div2 < 30);
 		end if;
 	end process;
 	
@@ -126,10 +101,10 @@ begin
 	-- it sees a complete message, it asserts RECEIVED. It provides the message
 	-- id and data for storage, and waits until it receives RST before
 	-- clearing its id and data values and looking for the next message. If
-	-- it receives RST at any other time, it returns to its reast state, waiting
+	-- it receives RST at any other time, it returns to its rest state, waiting
 	-- for a new message to arrive.
 	Decoder : entity message_decoder port map (
-		CK => CK,-- Clock, 40.000 MHz
+		CK => CK,-- Clock, 40.0 MHz
 		Q => Q, -- Demodulator Output
 		RST => RSTDCR, -- Reset the Decoder
 		INCOMING => INCOMING, -- Message Incoming
@@ -159,7 +134,6 @@ begin
 			SCK <= '1';
 			NCS <= '1';
 			pwr <= "00000000";
-			PRDY <= false;
 		elsif rising_edge(IOCK) then
 			next_state := state;
 			if state = 0 then
@@ -228,17 +202,17 @@ begin
 				when others =>
 					pwr <= pwr;
 			end case;
-			PRDY <= (state >= pwr_end);
+			if state = pwr_end then
+				pwr_rcv <= pwr;
+				RSTDCR <= '1';
+			else
+				RSTDCR <= '0';
+				pwr_rcv <= pwr_rcv;
+			end if;
 			state := next_state;
 		end if;
 	end process;
 		
-	-- The error detector looks for failure to lock.
-	Error_Detection : process (CK,RESET) is
-	begin
-		DMERR <= to_std_logic(LOCK = '0');
-	end process;
-	
 	-- The run indicator glows steady if power is on, logic is programmed,
 	-- and the clocks are running.
 	Run_Indicator : process (SLWCK) is
@@ -257,28 +231,25 @@ begin
 		LED(run_led_num) <= to_std_logic(run_led_on);
 	end process;
 	
-	-- The status indicator is off when all is well, and flashes 
-	-- to indicate error conditions. In this standalone code, the
-	-- only error is failure to get 40 MHz from 10 MHz with the PLL.
-	Status_Indicator : process (LCK) is
+	-- The status indicator turns on when we have no PLL lock.
+	Status_Indicator : process (RESET) is
 	variable counter : integer range 0 to 15;	variable err_led_on : boolean;
 	begin
-		if rising_edge(LCK) then
-			counter := counter + 1;
-			err_led_on := false;
+		if RESET = '1' then
+			LED(err_led_num) <= '0';
+		else
+			LED(err_led_num) <= not LOCK;
 		end if;
-		
-		err_led_on := (LOCK = '0');
-		
-		LED(err_led_num) <= to_std_logic(err_led_on);
 	end process;
 	
 	-- Indoming LED indicates message is being decoded now.
-	Incoming_Indicator : process (CK) is 
+	Incoming_Indicator : process (RESET,CK) is 
 	variable counter : integer range 0 to 65535;
 	constant pulse_length : integer := 32768;
 	begin
-		if rising_edge(CK) then
+		if RESET = '1' then
+			LED(inc_led_num) <='0';	
+		elsif rising_edge(CK) then
 			if (counter = 0) then
 				if (INCOMING = '1') then
 					counter := 1;
@@ -298,11 +269,13 @@ begin
 	end process;
 	
 	-- Received LED indicates complete message received.
-	Received_Indicator : process (CK) is 
+	Received_Indicator : process (RESET,CK) is 
 	variable counter : integer range 0 to 65535;
 	constant pulse_length : integer := 32768;
 	begin
-		if rising_edge(CK) then
+		if RESET = '1' then
+			LED(rcv_led_num) <= '0';
+		elsif rising_edge(CK) then
 			if (counter = 0) then
 				if (RECEIVED = '1') then
 					counter := 1;
@@ -331,10 +304,12 @@ begin
 	-- Power LED brightness proportional to the log of most recently-received 
 	-- message's power. We use the slow clock to generate a lamp signal with
 	-- duty cycle proportional to log power.
-	Power_Indicator : process (SLWCK) is 
+	Power_Indicator : process (RESET,SLWCK) is 
 	variable counter : integer range 0 to 255;
 	begin
-		if rising_edge(SLWCK) then
+		if RESET = '1' then
+			LED(pwr_led_num) <= '0';
+		elsif rising_edge(SLWCK) then
 			if counter < to_integer(unsigned(pwr_intensity)) then
 				LED(pwr_led_num) <= '1';	
 			else
@@ -353,8 +328,8 @@ begin
 	end process;
 	
 	-- Test Points, which are available externally.
-	TP(1) <= SDO;
-	TP(2) <= INCOMING;
-	TP(3) <= RECEIVED;
-	TP(4) <= to_std_logic(PRDY);
+	TP(1) <= CK;
+	TP(2) <= RECEIVED;
+	TP(3) <= SDO;
+	TP(4) <= RSTDCR;
 end behavior;

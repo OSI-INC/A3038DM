@@ -4,9 +4,9 @@
   (keywordMap (keywordLevel 0))
   (status
     (written
-      (timestamp 2024 6 18 9 32 50)
+      (timestamp 2024 7 12 9 48 35)
       (program "SCUBA" (version "Diamond (64-bit) 3.12.1.454"))))
-      (comment "C:\lscc\diamond\3.12\ispfpga\bin\nt64\scuba.exe -w -n P3038DM_PLL -lang vhdl -synth synplify -arch xo2c00 -type pll -fin 10 -fclkop 40 -fclkop_tol 0.0 -trimp 0 -phasep 0 -trimp_r -phase_cntl STATIC -fb_mode 1 -lock ")
+      (comment "C:\lscc\diamond\3.12\ispfpga\bin\nt64\scuba.exe -w -n P3038DM_PLL -lang vhdl -synth lse -arch xo2c00 -type pll -fin 8 -fclkop 40 -fclkop_tol 0.0 -trimp 0 -phasep 0 -trimp_r -phase_cntl STATIC -fb_mode 1 -lock ")
   (library ORCLIB
     (edifLevel 0)
     (technology
@@ -227,7 +227,7 @@
             (property CLKOP_ENABLE
               (string "ENABLED"))
             (property FREQUENCY_PIN_CLKI
-              (string "10.000000"))
+              (string "8.000000"))
             (property ICP_CURRENT
               (string "8"))
             (property LPF_RESISTOR
@@ -241,7 +241,7 @@
             (property CLKOP_DIV
               (string "13"))
             (property CLKFB_DIV
-              (string "4"))
+              (string "5"))
             (property CLKI_DIV
               (string "1"))
             (property FEEDBK_PATH

@@ -16,8 +16,8 @@ CoreRevision=5.8
 ModuleName=P3038DM_PLL
 SourceFormat=VHDL
 ParameterFileVersion=1.0
-Date=06/18/2024
-Time=09:32:49
+Date=07/12/2024
+Time=09:48:35
 
 [Parameters]
 Verilog=0
@@ -28,12 +28,12 @@ Expression=None
 Order=None
 IO=0
 mode=Frequency
-CLKI=10
+CLKI=8
 CLKI_DIV=1
-BW=0.992
+BW=0.793
 VCO=520.000
 fb_mode=CLKOP
-CLKFB_DIV=4
+CLKFB_DIV=5
 FRACN_ENABLE=0
 FRACN_DIV=0
 DynamicPhase=STATIC
@@ -84,4 +84,4 @@ CLKOS3_AFREQ=
 CLKOS3_PHASEADJ=0
 
 [Command]
-cmd_line= -w -n P3038DM_PLL -lang vhdl -synth synplify -arch xo2c00 -type pll -fin 10 -fclkop 40 -fclkop_tol 0.0 -trimp 0 -phasep 0 -trimp_r -phase_cntl STATIC -fb_mode 1 -lock
+cmd_line= -w -n P3038DM_PLL -lang vhdl -synth lse -arch xo2c00 -type pll -fin 8 -fclkop 40 -fclkop_tol 0.0 -trimp 0 -phasep 0 -trimp_r -phase_cntl STATIC -fb_mode 1 -lock
