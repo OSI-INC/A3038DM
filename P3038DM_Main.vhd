@@ -6,6 +6,9 @@
 -- available on the A303801A printed circuit board. Remove HIDE and SHOW. Eliminate
 -- indication of message buffer overflow and underflow.
 
+-- [11-JUL-24] Send the indicator lamps 1..5 to DC1..DC5. Eliminate unused processes
+-- and buffers.
+
 -- Global Constants
 library ieee;  
 use ieee.std_logic_1164.all;
@@ -17,17 +20,10 @@ entity main is
 		SDO : in std_logic;  -- Serial Data Out from ADC
 		SCK : inout std_logic; -- Serial Clock for ADC
 		NCS : inout std_logic; -- Negated Chip Select for ADC
-		DSD : in std_logic; -- Data Strobe Downstream
-		ddb : out std_logic_vector(7 downto 0); -- Data Downstream Bus
-		DSU : out std_logic; -- Data Strobe Upstream
-		dub : in std_logic_vector(7 downto 0); -- Data Upstream Bus
 		RESET : in std_logic; -- Reset from master (DC0)
-		DRC : in std_logic; -- Detector Readout Complete from master (DC1)
-		GERR : inout std_logic; -- Global detector module error flag (DC2)
-		GINC : inout std_logic; -- Global incoming message flag (DC3)
-		GRCV : inout std_logic; -- Global message received flag (DC4)
+		DC : out std_logic_vector(5 downto 1); -- External Indicators
 		DMCK : in std_logic; -- Detector Module Clock (10 MHz Oscillator)
-		LED : out std_logic_vector(5 downto 1); -- Indictors Lamps
+		LED : inout std_logic_vector(5 downto 1); -- On-Board Indictors
 		TP : out std_logic_vector(4 downto 1) -- Test Points
 	);
 	
@@ -47,7 +43,6 @@ architecture behavior of main is
 
 -- Detector Control Bus Signals
 	signal DMERR : std_logic; -- Detector module error, to master.
-	signal DSD_sync, GINC_sync, GRCV_sync, DRC_sync : std_logic; -- Synchronized inputs.
 
 -- Message Decoder Signals
 	signal CONTINUE : std_logic; -- Tell message detector to continue detection.
@@ -90,79 +85,10 @@ begin
 	-- IOCK at 20 MHz. Apply de-bounce to incoming signals that fall slowly so as
 	-- to guarantee only one falling edge.
 	Synchronizer : process (CK) is
-	constant max_state : integer := 15;
-	variable inc_state, next_inc_state : integer range 0 to max_state;
-	variable rcv_state, next_rcv_state : integer range 0 to max_state;
 	begin
 		-- Generate 20-MHz Input-Output Clock.
 		if rising_edge(CK) then
 			IOCK <= to_std_logic(IOCK = '0');
-		end if;
-		
-		-- Synchronize inputs asserted by controller.
-		if rising_edge(CK) then
-			DSD_sync <= DSD;
-			DRC_sync <= DRC;
-		end if;
-		
-		-- Synchronize GINC, debounce falling edge.
-		if RESET = '1' then
-			inc_state := 0;
-			GINC_sync <= '0';
-		elsif rising_edge(CK) then
-			if inc_state = 0 then
-				if GINC = '0' then
-					GINC_sync <= '0';
-					next_inc_state := 0;
-				else
-					GINC_sync <= '1';
-					next_inc_state := 1;
-				end if;
-			elsif inc_state = 1 then
-				GINC_sync <= '1';
-				if GINC = '0' then
-					next_inc_state := 2;
-				else
-					next_inc_state := 1;
-				end if;
-			elsif inc_state = max_state then
-				GINC_sync <= '0';
-				next_inc_state := 0;
-			else
-				GINC_sync <= '0';
-				next_inc_state := inc_state + 1;
-			end if;
-			inc_state := next_inc_state;
-		end if;
-		
-		-- Synchronize GRCV, debounce falling edge.
-		if RESET = '1' then
-			rcv_state := 0;
-			GRCV_sync <= '0';
-		elsif rising_edge(CK) then
-			if rcv_state = 0 then
-				if GRCV = '0' then
-					GRCV_sync <= '0';
-					next_rcv_state := 0;
-				else
-					GRCV_sync <= '1';
-					next_rcv_state := 1;
-				end if;
-			elsif rcv_state = 1 then
-				GRCV_sync <= '1';
-				if GRCV = '0' then
-					next_rcv_state := 2;
-				else
-					next_rcv_state := 1;
-				end if;
-			elsif rcv_state = max_state then
-				GRCV_sync <= '0';
-				next_rcv_state := 0;
-			else
-				GRCV_sync <= '0';
-				next_rcv_state := rcv_state + 1;
-			end if;
-			rcv_state := next_rcv_state;
 		end if;
 	end process;
 	
@@ -212,64 +138,17 @@ begin
 		message_data => message_data -- Message Data
 	);
 		
-	-- The Detector Control process operates the various detector control
-	-- lines that are shared by all detector modules and the master. In
-	-- particular, there are three global shared lines that each detector
-	-- can assert or leave tri-state. These are the global error, incoming,
-	-- and received lines.
-	Detector_Control : process (CK) is
-	begin
-		if rising_edge(CK) then
-			if DMERR = '1' then
-				GERR <= '1';
-			else
-				GERR <= 'Z';
-			end if;
-			
-			if INCOMING = '1' then
-				GINC <= '1';
-			else
-				GINC <= 'Z';
-			end if;
-			
-			if RECEIVED = '1' then
-				GRCV <= '1';
-			else
-				GRCV <= 'Z';
-			end if;
-		end if;
-	end process;
-	
-	-- The Message FIFO receives new 32-bit message records and allows the
-	-- them to be read out later by the detector module daisy chain. 
-	Message_FIFO : entity P3038DM_FIFO port map (
-		Data => received_record,
-        WrClock => CK,
-        RdClock => CK,
-        WrEn => WRMSG,
-        RdEn => RDMSG,
-        Reset => RESET,
-        RPReset => RESET,
-        Q => recalled_record,
-        Empty => FIFO_EMPTY,
-        Full => FIFO_FULL
-	);	
-	
 	-- We sample the power detector output and read out the ADC when we
-	-- see Global Incoming (GINC) asserted. We acquire the power detector
-	-- output voltage as soon as we see GINC asserted, by driving the ADC
-	-- chip select input low (asserting !CS). We then wait until GRCV is
-	-- asserted, at which time it is safe to read out the ADC without disturbing
+	-- see INCOMING asserted. We acquire the power detector output voltage 
+	-- as soon as we see INCOMING asserted, by driving the ADC chip select 
+	-- input low (asserting !CS). We then wait until RECEIVED is asserted, 
+	-- at which time it is safe to read out the ADC without disturbing
 	-- message reception. We generate SCK at 20 MHz and read out three dummy
 	-- bits, eight data bits, and three terminating bits. The ADC transitions
 	-- to input tracking after the third terminating bit. Once the readout is
-	-- complete, we wait for GINC to be unasserted, and then wait a little 
-	-- longer to make sure that GINC has settled. The GINC line is a global
-	-- signal with pull-down. It takes some time to settle back to zero, and 
-	-- transitions in nearby logic signals can cause it to glitch back up.
-	-- After the wait, we return to the rest state. The PRDY flag indicates that
-	-- a new power measurement is ready, and will be asserted until the power
-	-- readout returns to rest.
+	-- complete, we wait for INCOMING to be unasserted. The PRDY flag 
+	-- indicates that a new power measurement is ready, and will be asserted 
+	-- until the power readout returns to rest.
 	Power_Readout : process (IOCK) is
 	constant pwr_end : integer := 31;
 	constant wait_end : integer := 37;
@@ -284,21 +163,21 @@ begin
 		elsif rising_edge(IOCK) then
 			next_state := state;
 			if state = 0 then
-				if (GINC_sync = '1') then 
+				if (INCOMING = '1') then 
 					next_state := 1;
 				else
 					next_state := 0;
 				end if;
 			elsif state = 1 then
-				if (GINC_sync = '0') then
+				if (INCOMING = '0') then
 					next_state := 0;
-				elsif (GRCV_sync = '1') then
+				elsif (RECEIVED = '1') then
 					next_state := 2;
 				else
 					next_state := 1;
 				end if;
 			elsif state = pwr_end then
-				if (GINC_sync = '0') then
+				if (INCOMING = '0') then
 					next_state := state + 1;
 				else
 					next_state := pwr_end;
@@ -353,199 +232,7 @@ begin
 			state := next_state;
 		end if;
 	end process;
-	
-	-- The Message Recorder saves 32-bit message records in the FIFO. The
-	-- top eight bits are the message id, the next sixteen are the message
-	-- data, and the final eight are the power. If this detector did not
-	-- receive the message, the id and data are all zero.
-	Message_Recorder : process (CK,RESET) is
-	variable state, next_state : integer range 0 to 3;
-	begin
-		if RESET = '1' then
-			state := 0;
-			RSTDCR <= '1';
-			pwr_rcv <= "00000000";
-		elsif rising_edge(CK) then
-			next_state := state;
-			RSTDCR <= '0';
-			WRMSG <= '0';
-			case state is
-				when 0 =>
-					if (GRCV_sync = '1') and PRDY then 
-						next_state := 1;
-					end if;
-				when 1 =>
-					next_state := 2;
-					WRMSG <= '1';
-					pwr_rcv <= pwr;
-				when 2 =>
-					RSTDCR <= '1';
-					if GRCV_sync = '0' then
-						next_state := 3;
-					else
-						next_state := 2;
-					end if;
-				when 3 =>
-					RSTDCR <= '1';
-					next_state := 0;
-			end case;
-			state := next_state;
-		end if;
 		
-		if RECEIVED = '1' then
-			received_record(31 downto 24) <= std_logic_vector(to_unsigned(message_id,8));
-			received_record(23 downto 8) <= message_data;
-		else
-			received_record(31 downto 24) <= "00000000";
-			received_record(23 downto 8) <= "0000000000000000";
-		end if;
-		received_record(7 downto 0) <= pwr;
-	end process;
-	
-	-- The Message Reader responds to the readout process on the detector module
-	-- daisy chain. From its rest state, it reads a message from the FIFO after
-	-- seeing Data Strobe Downstream (DSD) from the module closer to the master.
-	-- All modules are receiving the same DSD and reading their records of the 
-	-- same message in resonse to the same DSD pulse. The first DSD cycle gives
-	-- the detectors a chance to establish if they are the highest-power receiver
-	-- in comparison to all upstream modules, and we set saved_local_best to mark
-	-- this comparison. The next DSD cycle invites the highest-power receivers to
-	-- send their message_id downstream. Other detectors relay the upstream data
-	-- to their downstream. The next DSD cycle invites the highest-power receivers
-	-- to do the same for the top eight data bits. The next cycle is for the bottom
-	-- eight data bits. The cycle after that is blocked from passing upstream: each
-	-- detector prevents DSD from being sent to DSU, and responds to the cycle 
-	-- itself, with its own power measurement. Thereafter, it permits all subsequent
-	-- DSD cycles to propagate upstream, and forwards the upstream data to the
-	-- downstream data. In this way the master receives the id, high data, low data,
-	-- and then power from the first to the last module in the daisy chain. The master
-	-- asserte Detector Read Complete (DRC) to send all Message Readers back to their
-	-- rest state, ready to read out the next message from the FIFO.
-	Message_Reader : process (CK,RESET) is
-	variable state, next_state : integer range 0 to 31;
-	variable recalled_id,recalled_pwr,upstream_value : integer range 0 to 255;
-	variable recalled_hi,recalled_lo : std_logic_vector(7 downto 0);
-	variable ddb_select : integer range 0 to 7;
-	constant select_zero : integer := 0;
-	constant select_dub : integer := 1;
-	constant select_pwr : integer := 2;
-	constant select_hi : integer := 3;
-	constant select_lo : integer := 4;
-	constant select_id : integer := 5;
-	constant max_pwr : integer := 6;
-	variable local_best, local_best_saved : boolean;
-	variable ds_forward : boolean;
-	begin
-		recalled_id := to_integer(unsigned(recalled_record(31 downto 24)));
-		recalled_hi := recalled_record(23 downto 16);
-		recalled_lo := recalled_record(15 downto 8);
-		recalled_pwr := to_integer(unsigned(recalled_record(7 downto 0)));
-		upstream_value := to_integer(unsigned(dub));
-		local_best := (upstream_value <= recalled_pwr) and (recalled_id /= 0);
-	
-		if (RESET = '1') or (DRC_sync = '1') then
-			state := 0;
-			RDMSG <= '0';
-		elsif rising_edge(CK) then
-			next_state := state;
-			RDMSG <= '0';
-			case state is 
-				when 0 =>
-					if DSD_sync = '1' then next_state := 1; end if;
-					local_best_saved := false;
-					ddb_select := select_zero;
-					ds_forward := true;
-				when 1 =>
-					next_state := 2;
-					ddb_select := select_zero;
-					ds_forward := true;
-					RDMSG <= '1';
-				when 2 => 
-					if DSD_sync = '0' then next_state := 3; end if;
-					local_best_saved := local_best;
-					ddb_select := max_pwr;
-					ds_forward := true;
-				when 3 =>
-					if DSD_sync = '1' then next_state := 4; end if;
-					ddb_select := select_zero;
-					ds_forward := true;
-				when 4 => 
-					if DSD_sync = '0' then next_state := 5; end if;
-					if local_best_saved then
-						ddb_select := select_id;
-					else
-						ddb_select := select_dub;
-					end if;
-					ds_forward := true;
-				when 5 =>
-					if DSD_sync = '1' then next_state := 6; end if;
-					ddb_select := select_zero;
-					ds_forward := true;
-				when 6 =>
-					if DSD_sync = '0' then next_state := 7; end if;
-					if local_best_saved then
-						ddb_select := select_hi;
-					else
-						ddb_select := select_dub;
-					end if;
-					ds_forward := true;
-				when 7 => 
-					if DSD_sync = '1' then next_state := 8; end if;
-					ddb_select := select_zero;
-					ds_forward := true;
-				when 8 =>
-					if DSD_sync = '0' then next_state := 9; end if;
-					if local_best_saved then
-						ddb_select := select_lo;
-					else
-						ddb_select := select_dub;
-					end if;
-					ds_forward := true;
-				when 9 => 
-					if DSD_sync = '1' then next_state := 10; end if;
-					ddb_select := select_zero;
-					ds_forward := false;
-				when 10 =>
-					if DSD_sync = '0' then next_state := 11; end if;
-					ddb_select := select_pwr;
-					ds_forward := false;
-				when 11 => 
-					if DSD_sync = '1' then next_state := 12; end if;
-					ddb_select := select_zero;
-					ds_forward := true;
-				when 12 =>
-					ddb_select := select_dub;
-					ds_forward := true;
-				when others =>
-					next_state := 0;
-					ds_forward := true;
-			end case;
-			state := next_state;
-		end if;
-		
-		case ddb_select is
-			when select_zero => ddb <= "00000000";
-			when select_dub => ddb <= dub;
-			when select_pwr => ddb <= recalled_record(7 downto 0);
-			when select_hi => ddb <= recalled_hi;
-			when select_lo => ddb <= recalled_lo;
-			when select_id => ddb <= recalled_record(31 downto 24);
-			when max_pwr => 	
-				if local_best then
-					ddb <= recalled_record(7 downto 0);
-				else
-					ddb <= dub;
-				end if;
-			when others => ddb <= "00000000";
-		end case;
-		
-		if ds_forward then
-			DSU <= DSD_sync;
-		else
-			DSU <= '0';
-		end if;
-	end process;
-	
 	-- The error detector looks for failure to lock.
 	Error_Detection : process (CK,RESET) is
 	begin
@@ -657,8 +344,17 @@ begin
 		end if;
 	end process;
 	
+	-- External indicators are equal to the on-board indicators.
+	External_Indicators : process (RESET) is
+	begin
+		for i in 1 to 5 loop
+			DC(i) <= LED(i);
+		end loop;
+	end process;
+	
+	-- Test Points, which are available externally.
 	TP(1) <= SDO;
-	TP(2) <= GINC_sync;
-	TP(3) <= GRCV_sync;
-	TP(4) <= DSD;
+	TP(2) <= INCOMING;
+	TP(3) <= RECEIVED;
+	TP(4) <= to_std_logic(PRDY);
 end behavior;

@@ -1,27 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <BaliProject version="3.2" title="P3038DM" device="LCMXO2-1200ZE-1TG100C" default_implementation="impl1">
     <Options/>
-    <Implementation title="impl1" dir="impl1" description="impl1" synthesis="synplify" default_strategy="Strategy1">
+    <Implementation title="impl1" dir="impl1" description="impl1" synthesis="lse" default_strategy="Strategy1">
         <Options/>
         <Source name="P3038DM_PLL.ipx" type="IPX_Module" type_short="IPX">
-            <Options/>
-        </Source>
-        <Source name="P3038DM_PLL.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
         <Source name="P3038DM_Decoder.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
-        <Source name="P3038DM_FIFO.vhd" type="VHDL" type_short="VHDL">
-            <Options/>
-        </Source>
-        <Source name="P3038DM_FIFO.ipx" type="IPX_Module" type_short="IPX">
-            <Options/>
-        </Source>
         <Source name="P3038DM_PWMAP.ipx" type="IPX_Module" type_short="IPX">
-            <Options/>
-        </Source>
-        <Source name="P3038DM_PWMAP.vhd" type="VHDL" type_short="VHDL">
             <Options/>
         </Source>
         <Source name="P3038DM_Main.vhd" type="VHDL" type_short="VHDL">
